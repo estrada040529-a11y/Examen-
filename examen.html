@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Atlas de formas | Vision Lab</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+	<style>
+		:root {
+			color-scheme: light;
+			--paper: #eaf0eb;
+			--ink: #1d302d;
+			--muted: #64746e;
+			--line: #d4dfd8;
+			--green: #176b55;
+			--green-light: #e2f0e7;
+			--coral: #d96f50;
+			--yellow: #e8b44b;
+			--blue: #477a91;
+			--panel: #fffefa;
+			--mono: "DM Mono", "Cascadia Code", Consolas, monospace;
+			--display: "Space Grotesk", "Trebuchet MS", sans-serif;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			min-width: 320px;
+			background-color: var(--paper);
+			background-image: linear-gradient(90deg, rgba(255,255,255,.28) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.28) 1px, transparent 1px);
+			background-size: 34px 34px;
+			color: var(--ink);
+			font-family: var(--display);
+		}
+		button, input { font: inherit; }
+		.topbar {
+			height: 64px;
+			padding: 0 max(24px, calc((100vw - 1440px) / 2 + 34px));
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			border-bottom: 1px solid #31574e;
+			background: #183d35;
+			color: #f7faf6;
+		}
+		.brand { display: flex; align-items: center; gap: 11px; font-size: 15px; font-weight: 800; letter-spacing: .03em; }
+		.brand-mark { width: 25px; height: 25px; border: 2px solid #e8f2e9; border-radius: 50%; position: relative; }
+		.brand-mark::after { content: ""; position: absolute; width: 8px; height: 8px; background: var(--coral); right: -3px; bottom: -1px; border-radius: 50%; border: 2px solid #183d35; }
+		.top-meta { display: flex; align-items: center; gap: 10px; padding: 8px 11px; border: 1px solid #42665d; border-radius: 999px; color: #dce8df; font: 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+		.live-dot { width: 8px; height: 8px; background: var(--yellow); border-radius: 50%; box-shadow: 0 0 0 3px #ffffff18; }
+		main { max-width: 1440px; margin: 0 auto; padding: 32px 34px 46px; }
+		.heading { display: flex; justify-content: space-between; align-items: end; gap: 22px; margin-bottom: 23px; }
+		.eyebrow { color: var(--green); font: 10px var(--mono); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 12px; }
+		h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); letter-spacing: 0; line-height: .99; font-weight: 600; }
+		.intro { max-width: 390px; margin: 0 0 4px; padding-left: 17px; border-left: 2px solid var(--coral); color: var(--muted); font-size: 14px; line-height: 1.65; }
+		.toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-bottom: 14px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,254,250,.84); }
+		.button {
+			min-height: 42px; padding: 0 15px; border: 1px solid #cbd8d0; border-radius: 5px; background: var(--panel); color: var(--ink);
+			font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 9px;
+			transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+		}
+		.button:hover { transform: translateY(-1px); border-color: var(--green); box-shadow: 0 4px 11px #173d3517; }
+		.button:focus-visible { outline: 3px solid #e8b44b; outline-offset: 2px; }
+		.button.primary { border-color: #155e4b; background: #176b55; color: white; box-shadow: inset 0 1px #ffffff26; }
+		.button.primary:hover { background: #125743; }
+		.button svg { width: 15px; height: 15px; }
+		.toolbar-note { color: var(--muted); font: 10px var(--mono); margin-left: auto; }
+		.workspace { display: grid; grid-template-columns: minmax(0, 1.48fr) minmax(330px, .82fr); gap: 17px; align-items: stretch; }
+		.panel { min-width: 0; border: 1px solid #d2ddd5; border-radius: 8px; background: var(--panel); box-shadow: 0 8px 24px #24473a0b; overflow: hidden; }
+		.panel-head { min-height: 54px; padding: 0 17px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e4eae4; background: #fffefa; }
+		.panel-title { font-size: 12px; font-weight: 700; display: flex; gap: 10px; align-items: center; }
+		.panel-index { width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; background: #e9f1ea; color: var(--green); font: 10px var(--mono); }
+		.panel-meta { color: var(--muted); font: 9px var(--mono); }
+		.image-stage { height: min(57vw, 510px); min-height: 330px; padding: 20px; background-color: #e5ece6; background-image: linear-gradient(90deg, #d6e0d8 1px, transparent 1px), linear-gradient(#d6e0d8 1px, transparent 1px); background-size: 22px 22px; position: relative; display: grid; place-items: center; overflow: hidden; }
+		#imageCanvas { display: block; max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid #d6ded7; box-shadow: 0 12px 30px #213c3026; background: white; touch-action: none; cursor: crosshair; }
+		.empty-state { position: absolute; display: grid; justify-items: center; text-align: center; padding: 25px; pointer-events: none; }
+		.empty-icon { width: 56px; height: 56px; margin-bottom: 14px; border: 1px dashed #91a098; border-radius: 50%; display: grid; place-items: center; color: var(--green); background: #f7faf6; }
+		.empty-icon svg { width: 25px; height: 25px; }
+		.empty-state strong { font-size: 15px; }
+		.empty-state span { margin-top: 6px; color: var(--muted); font-size: 12px; }
+		.status-line { min-height: 42px; padding: 0 17px; display: flex; align-items: center; gap: 10px; border-top: 1px solid #e4eae4; background: #fbfcf8; color: var(--muted); font: 10px var(--mono); }
+		.status-indicator { width: 7px; height: 7px; flex: none; background: var(--yellow); border-radius: 50%; }
+		.status-indicator.ready { background: var(--green); }
+		.status-indicator.error { background: var(--coral); }
+		.side-column { display: grid; grid-template-rows: minmax(265px, 1fr) auto; gap: 17px; }
+		.graph-area { height: 244px; position: relative; padding: 8px; background: linear-gradient(180deg, #fbfcf8, #f7faf6); }
+		#graphCanvas { width: 100%; height: 100%; display: block; }
+		.graph-legend { padding: 0 15px 13px; display: flex; align-items: center; gap: 8px; color: var(--muted); font: 10px var(--mono); }
+		.legend-line { width: 28px; height: 0; border-top: 3px solid var(--green); }
+		.legend-range { margin-left: auto; }
+		.results-head { padding: 14px 15px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+		.results-head strong { font-size: 12px; }
+		.count { min-width: 29px; padding: 5px 7px; border-radius: 4px; background: #e7f0e9; color: var(--green); font: 10px var(--mono); text-align: center; }
+		.result-list { max-height: 194px; overflow: auto; }
+		.result-empty { padding: 20px 15px; color: var(--muted); font-size: 12px; }
+		.result-row { display: grid; grid-template-columns: 27px minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 11px 15px; border-bottom: 1px solid #e9ece5; }
+		.result-number { color: #8b9690; font: 10px var(--mono); }
+		.result-name { font-size: 12px; font-weight: 800; text-transform: capitalize; }
+		.result-features { color: var(--muted); font: 9px var(--mono); margin-top: 4px; }
+		.shape-chip { padding: 5px 7px; border-radius: 3px; background: var(--green-light); color: var(--green); font: 9px var(--mono); white-space: nowrap; }
+		.shape-chip.null { background: #f7e4dc; color: #9c4a36; }
+		.bottom-note { margin-top: 15px; display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font: 9px var(--mono); }
+		.bottom-note span:last-child { text-align: right; }
+		#fileInput { display: none; }
+		@media (max-width: 850px) {
+			main { padding: 25px 20px 34px; }
+			.workspace { grid-template-columns: minmax(0, 1fr); }
+			.side-column { grid-template-columns: minmax(0, 1fr) minmax(260px, .85fr); grid-template-rows: auto; }
+			.image-stage { height: 54vw; min-height: 310px; }
+			.toolbar-note { width: 100%; margin: 2px 0 0; }
+		}
+		@media (max-width: 590px) {
+			.topbar { height: 56px; padding: 0 17px; }
+			.top-meta { font-size: 9px; }
+			main { padding: 23px 14px 28px; }
+			.heading { align-items: start; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+			h1 { font-size: 34px; }
+			.intro { font-size: 13px; }
+			.toolbar { gap: 8px; }
+			.button { min-height: 38px; padding: 0 11px; }
+			.side-column { grid-template-columns: minmax(0, 1fr); }
+			.image-stage { height: 72vw; min-height: 270px; }
+			.image-stage { padding: 12px; }
+			.empty-state { padding: 14px; }
+			.toolbar-note { font-size: 9px; line-height: 1.5; }
+			.bottom-note { flex-direction: column; }
+			.bottom-note span:last-child { text-align: left; }
+		}
+		@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+	</style>
+</head>
+<body>
+	<header class="topbar">
+		<div class="brand"><span class="brand-mark" aria-hidden="true"></span> VISION LAB <span style="color:var(--muted);font-weight:400">/ FIGURAS</span></div>
+		<div class="top-meta"><span class="live-dot" id="opencvDot"></span><span id="opencvLabel">Conectando OpenCV</span></div>
+	</header>
+	<main>
+		<section class="heading">
+			<div><div class="eyebrow">An&aacute;lisis geom&eacute;trico  /  01</div><h1>Dibuja y reconoce<br>figuras</h1></div>
+			<p class="intro">Traza una figura en el lienzo. Al soltar el mouse, OpenCV identifica su forma y actualiza el grafo de similitud.</p>
+		</section>
+		<div class="toolbar">
+			<button class="button primary" id="recognizeButton" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5M10.8 7.5v6.6M7.5 10.8h6.6"/></svg> Reconocer</button>
+			<button class="button" id="clearButton" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg> Limpiar</button>
+			<span class="toolbar-note">DIBUJA UNA FIGURA CERRADA CON EL MOUSE O EL DEDO</span>
+		</div>
+		<section class="workspace" aria-label="Espacio de an&aacute;lisis">
+			<article class="panel">
+				<div class="panel-head"><div class="panel-title"><span class="panel-index">A</span> Lienzo de dibujo</div><span class="panel-meta" id="imageMeta">900 x 520 PX</span></div>
+				<div class="image-stage" id="imageStage">
+					<canvas id="imageCanvas" hidden></canvas>
+					<div class="empty-state" id="emptyState"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 18c5-1 3-11 8-12 3-.6 2 5 7 3M5 21h14"/></svg></div><strong>Dibuja aqu&iacute; tu figura</strong><span>Mant&eacute;n pulsado y traza un contorno cerrado</span></div>
+				</div>
+				<div class="status-line"><span class="status-indicator" id="statusIndicator"></span><span id="statusText">Dibuja una figura con el mouse o el dedo</span></div>
+			</article>
+			<div class="side-column">
+				<article class="panel">
+					<div class="panel-head"><div class="panel-title"><span class="panel-index">B</span> Grafo de similitud</div><span class="panel-meta" id="edgeMeta">0 ARISTAS</span></div>
+					<div class="graph-area"><canvas id="graphCanvas"></canvas></div>
+					<div class="graph-legend"><span class="legend-line"></span><span>arista = similitud</span><span class="legend-range">d&eacute;bil&nbsp;  &rarr;  fuerte</span></div>
+				</article>
+				<article class="panel">
+					<div class="results-head"><strong>Figuras detectadas</strong><span class="count" id="shapeCount">00</span></div>
+					<div class="result-list" id="resultList"><div class="result-empty">Dibuja una figura para ver su etiqueta y sus rasgos.</div></div>
+				</article>
+			</div>
+		</section>
+		<div class="bottom-note"><span>FIGURAS: C&Iacute;RCULO / CUADRADO / TRI&Aacute;NGULO / TRAPECIO / ESTRELLA / NULL</span><span>RASGOS: CIRCULARIDAD / PROPORCI&Oacute;N / SOLIDEZ / V&Eacute;RTICES</span><span>OpenCV.js &middot; contornos externos &middot; Otsu</span></div>
+	</main>
+	<script>
+		const imageCanvas = document.getElementById('imageCanvas');
+		const imageContext = imageCanvas.getContext('2d');
+		const baseCanvas = document.createElement('canvas');
+		baseCanvas.width = 900;
+		baseCanvas.height = 520;
+		const baseContext = baseCanvas.getContext('2d');
+		const graphCanvas = document.getElementById('graphCanvas');
+		const graphContext = graphCanvas.getContext('2d');
+		const statusText = document.getElementById('statusText');
+		const statusIndicator = document.getElementById('statusIndicator');
+		const emptyState = document.getElementById('emptyState');
+		let cvReady = false;
+		let detections = [];
+		let hasDrawing = false;
+		let drawing = false;
+		let lastPoint = null;
+		imageCanvas.width = baseCanvas.width;
+		imageCanvas.height = baseCanvas.height;
+		imageCanvas.hidden = false;
+		baseContext.fillStyle = '#ffffff';
+		baseContext.fillRect(0, 0, baseCanvas.width, baseCanvas.height);
+		imageContext.drawImage(baseCanvas, 0, 0);
+
+		function setStatus(message, state = '') {
+			statusText.textContent = message;
+			statusIndicator.className = `status-indicator ${state}`;
+		}
+
+		function markOpenCvReady() {
+			cvReady = true;
+			document.getElementById('opencvLabel').textContent = 'OpenCV listo';
+			document.getElementById('opencvDot').style.background = 'var(--green)';
+			if (hasDrawing) analyzeImage();
+			else setStatus('Dibuja una figura con el mouse o el dedo');
+		}
+
+		if (window.cv && cv.Mat) markOpenCvReady();
+		else if (window.cv) cv.onRuntimeInitialized = markOpenCvReady;
+		else {
+			const cvScript = document.querySelector('script[src*="opencv.js"]');
+			cvScript.addEventListener('load', () => {
+				if (window.cv && cv.Mat) markOpenCvReady();
+				else if (window.cv) cv.onRuntimeInitialized = markOpenCvReady;
+			});
+			cvScript.addEventListener('error', () => {
+				document.getElementById('opencvLabel').textContent = 'OpenCV no disponible';
+				setStatus('No se pudo cargar OpenCV.js. Comprueba tu conexi&oacute;n.', 'error');
+			});
+		}
+
+		function pointerPosition(event) {
+			const rect = imageCanvas.getBoundingClientRect();
+			return {
+				x: (event.clientX - rect.left) * imageCanvas.width / rect.width,
+				y: (event.clientY - rect.top) * imageCanvas.height / rect.height
+			};
+		}
+
+		function drawSegment(context, from, to) {
+			context.beginPath();
+			context.moveTo(from.x, from.y);
+			context.lineTo(to.x, to.y);
+			context.strokeStyle = '#273532';
+			context.lineWidth = 12;
+			context.lineCap = 'round';
+			context.lineJoin = 'round';
+			context.stroke();
+		}
+
+		imageCanvas.addEventListener('pointerdown', (event) => {
+			if (event.pointerType === 'mouse' && event.button !== 0) return;
+			event.preventDefault();
+			imageContext.drawImage(baseCanvas, 0, 0);
+			emptyState.hidden = true;
+			drawing = true;
+			hasDrawing = true;
+			lastPoint = pointerPosition(event);
+			imageCanvas.setPointerCapture(event.pointerId);
+			drawSegment(baseContext, lastPoint, lastPoint);
+			drawSegment(imageContext, lastPoint, lastPoint);
+			setStatus('Suelta el mouse para reconocer la figura');
+		});
+
+		imageCanvas.addEventListener('pointermove', (event) => {
+			if (!drawing) return;
+			event.preventDefault();
+			const point = pointerPosition(event);
+			drawSegment(baseContext, lastPoint, point);
+			drawSegment(imageContext, lastPoint, point);
+			lastPoint = point;
+		});
+
+		function finishStroke() {
+			if (!drawing) return;
+			drawing = false;
+			lastPoint = null;
+			if (cvReady) analyzeImage();
+			else setStatus('Trazo listo; esperando que OpenCV termine de cargar');
+		}
+
+		imageCanvas.addEventListener('pointerup', finishStroke);
+		imageCanvas.addEventListener('pointercancel', finishStroke);
+
+		function classifyShape(points, perimeter, area, bounds, solidity, circularity) {
+			const count = points.length;
+			const ratio = bounds.width / Math.max(bounds.height, 1);
+			if (count >= 5 && solidity < 0.86 && circularity < 0.82) return 'estrella';
+			if (circularity > 0.82) return 'circulo';
+			if (count === 3) return 'triangulo';
+			if (count === 4) {
+				const sides = points.map((point, index) => {
+					const next = points[(index + 1) % points.length];
+					return { x: next.x - point.x, y: next.y - point.y };
+				});
+				const parallel = (a, b) => {
+					const dot = Math.abs(a.x * b.x + a.y * b.y);
+					const lengths = Math.hypot(a.x, a.y) * Math.hypot(b.x, b.y);
+					return lengths > 0 && dot / lengths > 0.91;
+				};
+				const hasParallelPair = parallel(sides[0], sides[2]) || parallel(sides[1], sides[3]);
+				if (hasParallelPair) {
+					if (ratio > 0.88 && ratio < 1.12 && solidity > 0.92) return 'cuadrado';
+					return 'trapecio';
+				}
+			}
+			return 'null';
+		}
+
+		function analyzeImage() {
+			if (!cvReady || !hasDrawing) return;
+			setStatus('Procesando contornos con OpenCV.js');
+			let source, gray, blurred, binary, contours, hierarchy, kernel;
+			const found = [];
+			try {
+				source = cv.imread(baseCanvas);
+				gray = new cv.Mat();
+				blurred = new cv.Mat();
+				binary = new cv.Mat();
+				contours = new cv.MatVector();
+				hierarchy = new cv.Mat();
+				kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+				cv.cvtColor(source, gray, cv.COLOR_RGBA2GRAY);
+				cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+				cv.threshold(blurred, binary, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+				cv.morphologyEx(binary, binary, cv.MORPH_CLOSE, kernel);
+				cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+				const minArea = imageCanvas.width * imageCanvas.height * 0.00045;
+				for (let index = 0; index < contours.size(); index += 1) {
+					const contour = contours.get(index);
+					const area = cv.contourArea(contour);
+					if (area < minArea || area > imageCanvas.width * imageCanvas.height * 0.92) { contour.delete(); continue; }
+					const perimeter = cv.arcLength(contour, true);
+					const approximation = new cv.Mat();
+					cv.approxPolyDP(contour, approximation, 0.045 * perimeter, true);
+					const points = [];
+					for (let pointIndex = 0; pointIndex < approximation.rows; pointIndex += 1) {
+						points.push({ x: approximation.data32S[pointIndex * 2], y: approximation.data32S[pointIndex * 2 + 1] });
+					}
+					const bounds = cv.boundingRect(contour);
+					const hull = new cv.Mat();
+					cv.convexHull(contour, hull);
+					const hullArea = cv.contourArea(hull);
+					const solidity = hullArea ? area / hullArea : 0;
+					const circularity = perimeter ? (4 * Math.PI * area) / (perimeter * perimeter) : 0;
+					const label = classifyShape(points, perimeter, area, bounds, solidity, circularity);
+					found.push({
+						label, points, bounds, area, perimeter, solidity, circularity,
+						ratio: bounds.width / Math.max(bounds.height, 1),
+						center: { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+					});
+					approximation.delete(); hull.delete(); contour.delete();
+				}
+			} catch (error) {
+				console.error(error);
+				setStatus(`Error de OpenCV: ${error.message || error}`, 'error');
+				return;
+			} finally {
+				[source, gray, blurred, binary, contours, hierarchy, kernel].forEach((mat) => { if (mat) mat.delete(); });
+			}
+			detections = found.sort((a, b) => a.center.y - b.center.y || a.center.x - b.center.x);
+			drawDetections();
+			renderResults();
+			renderGraph();
+			if (detections.length) setStatus(`${detections.length} figura${detections.length === 1 ? '' : 's'} detectada${detections.length === 1 ? '' : 's'}; ${edgeCount(detections.length)} aristas calculadas`, 'ready');
+			else setStatus('No se detecto una figura. Traza un contorno cerrado mas grande.', 'error');
+		}
+
+		function edgeCount(count) { return count * (count - 1) / 2; }
+
+		function drawDetections() {
+			imageContext.drawImage(baseCanvas, 0, 0);
+			detections.forEach((shape, index) => {
+				const { x, y, width, height } = shape.bounds;
+				imageContext.strokeStyle = shape.label === 'null' ? '#e16d51' : '#1b725b';
+				imageContext.lineWidth = Math.max(2, imageCanvas.width / 450);
+				imageContext.strokeRect(x, y, width, height);
+				const fontSize = Math.max(13, imageCanvas.width / 65);
+				const tag = `${index + 1}  ${shape.label}`;
+				imageContext.font = `700 ${fontSize}px Trebuchet MS, sans-serif`;
+				const tagWidth = imageContext.measureText(tag).width + 12;
+				const tagY = Math.max(0, y - fontSize - 9);
+				imageContext.fillStyle = shape.label === 'null' ? '#e16d51' : '#1b725b';
+				imageContext.fillRect(x, tagY, tagWidth, fontSize + 8);
+				imageContext.fillStyle = '#ffffff';
+				imageContext.fillText(tag, x + 6, tagY + fontSize + 1);
+			});
+		}
+
+		function featureSimilarity(first, second) {
+			const circularity = 1 - Math.min(1, Math.abs(first.circularity - second.circularity));
+			const proportion = 1 - Math.min(1, Math.abs(Math.log(Math.max(first.ratio, 0.01) / Math.max(second.ratio, 0.01))) / Math.log(8));
+			const solidity = 1 - Math.min(1, Math.abs(first.solidity - second.solidity));
+			const vertices = 1 - Math.min(1, Math.abs(first.points.length - second.points.length) / 10);
+			return Math.round((circularity * 0.3 + proportion * 0.2 + solidity * 0.25 + vertices * 0.25) * 100);
+		}
+
+		function renderResults() {
+			document.getElementById('shapeCount').textContent = String(detections.length).padStart(2, '0');
+			const list = document.getElementById('resultList');
+			if (!detections.length) {
+				list.innerHTML = '<div class="result-empty">No se encontraron figuras. Prueba con formas de alto contraste sobre un fondo sencillo.</div>';
+				return;
+			}
+			list.innerHTML = detections.map((shape, index) => {
+				const ratio = shape.ratio.toFixed(2);
+				const circularity = shape.circularity.toFixed(2);
+				return `<div class="result-row"><span class="result-number">${String(index + 1).padStart(2, '0')}</span><div><div class="result-name">${shape.label}</div><div class="result-features">C ${circularity} &middot; R ${ratio} &middot; S ${shape.solidity.toFixed(2)} &middot; V ${shape.points.length}</div></div><span class="shape-chip ${shape.label === 'null' ? 'null' : ''}">${shape.points.length} V&Eacute;RT.</span></div>`;
+			}).join('');
+		}
+
+		function renderGraph() {
+			const rect = graphCanvas.getBoundingClientRect();
+			const ratio = window.devicePixelRatio || 1;
+			graphCanvas.width = Math.max(1, Math.round(rect.width * ratio));
+			graphCanvas.height = Math.max(1, Math.round(rect.height * ratio));
+			graphContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+			const width = rect.width, height = rect.height;
+			graphContext.clearRect(0, 0, width, height);
+			document.getElementById('edgeMeta').textContent = `${edgeCount(detections.length)} ARISTAS`;
+			if (!detections.length) {
+				graphContext.fillStyle = '#7a8781';
+				graphContext.font = '12px Cascadia Code, monospace';
+				graphContext.textAlign = 'center';
+				graphContext.fillText('El grafo se dibuja al detectar figuras', width / 2, height / 2);
+				return;
+			}
+			const inset = 32;
+			const xs = detections.map(shape => shape.center.x), ys = detections.map(shape => shape.center.y);
+			const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+			const graphNodes = detections.map(shape => ({
+				x: inset + (maxX === minX ? .5 : (shape.center.x - minX) / (maxX - minX)) * (width - inset * 2),
+				y: inset + (maxY === minY ? .5 : (shape.center.y - minY) / (maxY - minY)) * (height - inset * 2)
+			}));
+			for (let first = 0; first < detections.length; first += 1) {
+				for (let second = first + 1; second < detections.length; second += 1) {
+					const weight = featureSimilarity(detections[first], detections[second]);
+					graphContext.beginPath();
+					graphContext.moveTo(graphNodes[first].x, graphNodes[first].y);
+					graphContext.lineTo(graphNodes[second].x, graphNodes[second].y);
+					graphContext.strokeStyle = weight > 70 ? `rgba(27,114,91,${0.25 + weight / 140})` : `rgba(71,122,145,${0.12 + weight / 190})`;
+					graphContext.lineWidth = 0.8 + weight / 24;
+					graphContext.stroke();
+					const midX = (graphNodes[first].x + graphNodes[second].x) / 2;
+					const midY = (graphNodes[first].y + graphNodes[second].y) / 2;
+					graphContext.fillStyle = '#fffefa';
+					graphContext.beginPath(); graphContext.arc(midX, midY, 10, 0, Math.PI * 2); graphContext.fill();
+					graphContext.fillStyle = '#4c5c56';
+					graphContext.font = '9px Cascadia Code, monospace';
+					graphContext.textAlign = 'center';
+					graphContext.textBaseline = 'middle';
+					graphContext.fillText(String(weight), midX, midY);
+				}
+			}
+			graphNodes.forEach((node, index) => {
+				graphContext.beginPath(); graphContext.arc(node.x, node.y, 13, 0, Math.PI * 2);
+				graphContext.fillStyle = detections[index].label === 'null' ? '#e16d51' : '#1b725b';
+				graphContext.fill();
+				graphContext.fillStyle = 'white'; graphContext.font = '700 10px Cascadia Code, monospace'; graphContext.textAlign = 'center'; graphContext.textBaseline = 'middle';
+				graphContext.fillText(String(index + 1), node.x, node.y);
+				graphContext.fillStyle = '#40514a'; graphContext.font = '10px Trebuchet MS, sans-serif';
+				graphContext.fillText(detections[index].label, node.x, node.y + 24);
+			});
+		}
+
+		document.getElementById('recognizeButton').addEventListener('click', () => {
+			if (!hasDrawing) return setStatus('Dibuja una figura antes de reconocerla');
+			if (!cvReady) return setStatus('Esperando que OpenCV termine de cargar');
+			analyzeImage();
+		});
+		document.getElementById('clearButton').addEventListener('click', () => {
+			drawing = false; hasDrawing = false; lastPoint = null; detections = [];
+			baseContext.fillStyle = '#ffffff';
+			baseContext.fillRect(0, 0, baseCanvas.width, baseCanvas.height);
+			imageContext.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+			imageContext.drawImage(baseCanvas, 0, 0);
+			emptyState.hidden = false;
+			document.getElementById('shapeCount').textContent = '00';
+			document.getElementById('resultList').innerHTML = '<div class="result-empty">Dibuja una figura para ver su etiqueta y sus rasgos.</div>';
+			setStatus('Dibuja una figura con el mouse o el dedo'); renderGraph();
+		});
+		window.addEventListener('resize', renderGraph);
+		renderGraph();
+	</script>
+</body>
+</html>
